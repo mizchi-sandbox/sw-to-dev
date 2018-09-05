@@ -1,21 +1,315 @@
-export { default as theme } from './theme'
+export { default as theme } from "./theme";
 
-# Title
+# ServiceWorker Side XXX
 
----
-
-# About Me
-
-- [@mizchi](https://twitte.com/mizchi)
+[@mizchi](https://twitte.com/mizchi)
 
 ---
 
-code example
+## 最近趣味でやってること
 
-```jsx
-console.log('xxx')
+- [nedi.app](https://nedi.app)
+- オフラインでも動くPWAのエディタ
+- インストール不要で Git 動く
+
+---
+
+![](https://i.gyazo.com/7d42883da6485183d550b5f8241a906b.png)
+
+---
+
+## 「SWは次世代の開発支援ツールである」という話
+
+---
+
+![](https://i.gyazo.com/26427f0b5ed11dd79695363252af5bd2.png)
+
+[Can I Use - Service Worker](https://caniuse.com/#feat=serviceworkers)
+
+
+---
+
+## Service Worker とは
+
+合法ローカルプロキシ
+
+```js
+// client
+navigator.serviceWorker.register("/sw.js");
+// sw.js
+self.addEventListener('fetch', event => {
+  console.log('[fetch on sw]', event.request.url)
+})
 ```
 
 ---
 
-# The end
+## service-worker いつ使える？
+
+- 開発者向けツール: たぶん使って OK
+- 一般向けサービス: 2020~ (Windows7 サポート終了)
+- ビジネス向けサービス: 2023~ (Windows8 サポート終了)
+
+---
+
+## Service Worker: 2 つの方針
+
+- `透過的 PWA`: 既存の振る舞いを守ったまま高速化
+- `積極的 PWA`: SW でしか再現できない機能を使う
+
+---
+
+## 透過的 PWA
+
+- cache 構築
+- 投機的先読み
+- 消極的なオフライン化
+
+---
+
+## 投機的先読み
+
+![](https://i.gyazo.com/5884f78e5ce63bbc7dbbb94bda2df6c2.gif)
+
+https://dev.to
+
+---
+
+## Workbox
+
+- Google 製の SW Middleware
+- https://developers.google.com/web/tools/workbox/
+- workbox-webpack-plugin が導入簡単でおすすめ
+
+---
+
+## Workbox Strategy
+
+- staleWhileRevalidate
+- cacheFirst
+- networkFirst
+- networkOnly
+- cacheOnly
+
+[workbox-strategies](https://developers.google.com/web/tools/workbox/modules/workbox-strategies)
+
+---
+
+## cacheFirst
+
+![](https://developers.google.com/web/tools/workbox/images/modules/workbox-strategies/cache-first.png)
+
+「キャッシュが駄目だったらネットワークへ」
+
+---
+
+## staleWhileRevalidate
+
+![](https://developers.google.com/web/tools/workbox/images/modules/workbox-strategies/stale-while-revalidate.png)
+
+「キャッシュを返しつつ裏でアップデートしておく」
+
+---
+
+## 透過的 PWA: 大事なこと
+
+- 表向き透過なだけでも様々なキャッシュパターンがある
+- パフォーマンス特性でトレードオフがある
+
+---
+
+## 透過的 PWA は今すぐ使える
+
+- レガシー環境では単に無視される
+- 使えるブラウザではパフォーマンス向上させる (Prgressive)
+
+---
+
+## 透過的 PWA の弱点
+
+- SW とその他リソースは **並列で初期化される**
+- 初回リクエストは SW でプロキシされる保証がない
+
+---
+
+![](https://i.gyazo.com/5a0c4588965f76db780a6a99b044f987.png)
+
+---
+
+## 対策
+
+---
+
+初期化を SW ready まで遅延する
+
+```html
+<!-- <script src="./main.js"></script> -->
+<script type=module>
+(async () => {
+  await navigator.serviceWorker.register("/sw.js");
+  await navigator.serviceWorker.ready;
+  import("./main.js");
+})()
+</script>
+```
+
+---
+
+新しい SW に更新されたらリロード強制
+
+```jsx
+const r = await navigator.serviceWorker.register("/sw.js");
+navigator.serviceWorker.addEventListener("controllerchange", e =>
+  window.reload()
+);
+setInterval(() => r.update(), 1000);
+```
+
+---
+
+## 現実
+
+- あんまりベストプラクティス定まってない
+- 枯れてないのでハマりがち
+- 開発環境でなにかと壊れる
+- `chrome://serviceworker-internals` が友達
+
+---
+
+# 積極的 PWA
+
+---
+
+## 積極的 PWA
+
+- SW でないと実現できない機能をふんだんに使う
+- 単に クライアント/サーバー モデルと捉える
+
+---
+
+## 積極的 PWA の弱点
+
+- モダンブラウザのみ
+- SEO 壊滅
+
+---
+
+## SW Side Tranform
+
+- Babel / TypeScript
+- Server Side GraphQL
+- Express Emulator
+
+---
+
+## すべてが Hello World になる例
+
+```js
+self.addEventListener("fetch", event => {
+  event.respondWith(new Response("console.log('hello world')"));
+});
+```
+
+---
+
+## Babel で返す
+
+```js
+self.addEventListener("fetch", event => {
+  if (event.request.url.indexOf('.js') > -1) {
+    event.respondWith(async () => {
+      const res = await fetch(event.request)
+      const raw = await res.text()
+      return new Response(babel.transform(raw), {
+        mode: "no-cors",
+        headers: { "Content-Type": "text/javascript" }
+      });
+    });
+  }
+});
+```
+
+---
+
+## 思いつき
+
+Webpack が ESM エミューレータなら、ServiceWorker で Webpack のエミュレーションすればいいのでは？
+
+---
+
+## => やってみた
+
+---
+
+## trans-loader
+
+- [mizchi/trans-loader](https://mizchi/trans-loader)
+- onfetch 時の babel / typescript コンパイル
+- バンドルせず native esm でモジュール解決
+- jspm.io による npm モジュールの解決
+
+---
+
+## デモ
+
+![](https://i.gyazo.com/4c307c95d306c69dfcb10a9bb3f8aa30.png)
+
+---
+
+## jspm.io
+
+- https://jspm.io
+- npm のモジュールをESMに変換して返却するCDN
+- バージョンごとに冪等なはずなので trans-loader でキャッシュ
+
+---
+
+## trans-loader: 問題
+
+- commonjs <=> esm を可逆にするのは難しい
+- esm ビルドを公開してるライブラリは少数
+- (dev.jpsm.io が頻繁に落ちてる)
+
+---
+
+# 他のアイデア
+
+---
+
+## Express in ServiceWorker(Mock)
+
+- サーバー(Express) を SW で動かす
+- モックサーバーに使える
+
+---
+
+## Server Side ServiceWorker
+
+- 逆に SW 用のコードをサーバーで実行する
+- なんと Cloudflare が実装している (Cloudflare Workers) 
+
+---
+
+## Service Worker Side React SSR
+
+- html を返却する時に SSR する
+- SEO はともかく、 FMP 最適化にはなる
+
+---
+
+## 積極的 PWA: 用途
+
+- (将来的に枯れたら) 開発ツール
+- ある種の最適化が必要な ツール or ゲーム
+
+---
+
+## まとめ
+
+- SW は IEが死んだ後の動的ローダーとしても使える
+- 開発者向けツールではハチャメチャな事ができる
+- 今のうちに経験値貯めときましょう
+
+---
+
+# おわり
