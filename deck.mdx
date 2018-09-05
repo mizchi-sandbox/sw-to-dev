@@ -1,8 +1,14 @@
-export { default as theme } from "./theme";
-
 # ServiceWorker Side XXX
 
+export { default as theme } from "./theme";
+
 [@mizchi](https://twitte.com/mizchi)
+
+---
+
+![](https://images-na.ssl-images-amazon.com/images/I/51JSd7bBcsL._SX352_BO1,204,203,200_.jpg)
+
+「仮想DOM革命」書いた
 
 ---
 
@@ -11,6 +17,7 @@ export { default as theme } from "./theme";
 - [nedi.app](https://nedi.app)
 - オフラインでも動くPWAのエディタ
 - インストール不要で Git 動く
+- https://www.patreon.com/mizchi
 
 ---
 
@@ -18,7 +25,7 @@ export { default as theme } from "./theme";
 
 ---
 
-## 「SWは次世代の開発支援ツールである」という話
+## 開発環境のために SW を使おうとした話
 
 ---
 
@@ -26,6 +33,9 @@ export { default as theme } from "./theme";
 
 [Can I Use - Service Worker](https://caniuse.com/#feat=serviceworkers)
 
+---
+
+## みなさん ServiceWorker 使ってますか？
 
 ---
 
@@ -136,7 +146,7 @@ https://dev.to
 
 ---
 
-## 対策
+## どう対策するか
 
 ---
 
@@ -194,6 +204,10 @@ setInterval(() => r.update(), 1000);
 
 ---
 
+## どう使うか？
+
+---
+
 ## SW Side Tranform
 
 - Babel / TypeScript
@@ -215,17 +229,14 @@ self.addEventListener("fetch", event => {
 ## Babel で返す
 
 ```js
-self.addEventListener("fetch", event => {
-  if (event.request.url.indexOf('.js') > -1) {
-    event.respondWith(async () => {
-      const res = await fetch(event.request)
-      const raw = await res.text()
-      return new Response(babel.transform(raw), {
-        mode: "no-cors",
-        headers: { "Content-Type": "text/javascript" }
-      });
-    });
-  }
+import babel from '@babel/standalone'
+event.respondWith((async () => {
+  const res = await fetch(event.request)
+  return new Response(babel.transform(await res.text()), {
+    mode: "no-cors",
+    headers: { "Content-Type": "text/javascript" }
+  });
+})());
 });
 ```
 
@@ -233,7 +244,16 @@ self.addEventListener("fetch", event => {
 
 ## 思いつき
 
-Webpack が ESM エミューレータなら、ServiceWorker で Webpack のエミュレーションすればいいのでは？
+ServiceWorker で Webpack のエミュレーションすればいいのでは
+
+---
+
+
+## 気持ち
+
+- Webpack は ESM エミュレータである
+- でも JSX とか将来に渡ってネイティブでも動かない
+- SW で済ませば Webpack 不要になるのでは？
 
 ---
 
@@ -256,6 +276,19 @@ Webpack が ESM エミューレータなら、ServiceWorker で Webpack のエ�
 
 ---
 
+動いたコード
+
+```js
+import React from "react";
+import ReactDOM from "react-dom";
+import App from "./components/App";
+ReactDOM.render(<App />, document.querySelector(".root"));
+```
+
+JSX / npm / 拡張子省略 / 相対パス解決
+
+---
+
 ## jspm.io
 
 - https://jspm.io
@@ -267,8 +300,29 @@ Webpack が ESM エミューレータなら、ServiceWorker で Webpack のエ�
 ## trans-loader: 問題
 
 - commonjs <=> esm を可逆にするのは難しい
-- esm ビルドを公開してるライブラリは少数
-- (dev.jpsm.io が頻繁に落ちてる)
+- ESM ビルドを公開してるライブラリは少数
+- (https://dev.jpsm.io が頻繁に落ちてる)
+
+---
+
+## 諦めた部分
+
+```js
+// trans-loader で動くコード
+import Redux from 'redux'
+Redux.createStore(...)
+// 動かないコード
+import { createStore } from 'redux'
+```
+
+---
+
+## 実用可能か
+
+- 可逆な ESM <=> commonjs コンパイラを書く
+- みんなが rollup 使えばいける 
+- 現時点ではSW運用含めて厳しい
+
 
 ---
 
@@ -281,6 +335,8 @@ Webpack が ESM エミューレータなら、ServiceWorker で Webpack のエ�
 - サーバー(Express) を SW で動かす
 - モックサーバーに使える
 
+[express-service](https://github.com/bahmutov/express-service)
+
 ---
 
 ## Server Side ServiceWorker
@@ -290,10 +346,36 @@ Webpack が ESM エミューレータなら、ServiceWorker で Webpack のエ�
 
 ---
 
+[cloudflare workers](https://www.cloudflare.com/ja-jp/products/cloudflare-workers/)
+
+```js
+addEventListener('fetch', event => {
+  event.respondWith(fetchAndApply(event.request))
+})
+
+async function fetchAndApply(request) {
+  if (request.headers.get('cf-connecting-ip') === '225.0.0.1') {
+    return new Response('Sorry, this page is not available.',
+        { status: 403, statusText: 'Forbidden' })
+  }
+
+  return fetch(request)
+}
+````
+
+---
+
 ## Service Worker Side React SSR
 
 - html を返却する時に SSR する
 - SEO はともかく、 FMP 最適化にはなる
+
+```js
+const html = `
+<script>window.initialState = ${JSON.stringify(initialState)};<script>
+<body>${ReactDOM.renderToString(<App/ >)}</body>`
+event.respondWith(new Request(html, ...))
+````
 
 ---
 
